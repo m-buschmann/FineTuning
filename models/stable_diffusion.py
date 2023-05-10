@@ -29,7 +29,6 @@ from tensorflow import keras
 from keras_cv.models.stable_diffusion.clip_tokenizer import SimpleTokenizer
 from keras_cv.models.stable_diffusion.constants import _ALPHAS_CUMPROD
 from keras_cv.models.stable_diffusion.constants import _UNCONDITIONAL_TOKENS
-#from keras_cv.models.stable_diffusion.image_encoder import ImageEncoder
 
 from decoder import Decoder
 from text_encoder import TextEncoder

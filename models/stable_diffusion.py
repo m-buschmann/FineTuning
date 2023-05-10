@@ -40,6 +40,56 @@ from diffusion_model import DiffusionModelV2
 
 MAX_PROMPT_LENGTH = 77
 
+from keras_cv.models.stable_diffusion.__internal__.layers.attention_block import (
+    AttentionBlock,
+)
+from keras_cv.models.stable_diffusion.__internal__.layers.padded_conv2d import (
+    PaddedConv2D,
+)
+from keras_cv.models.stable_diffusion.__internal__.layers.resnet_block import (
+    ResnetBlock,
+)
+
+
+class ImageEncoder(keras.Sequential):
+    """ImageEncoder is the VAE Encoder for StableDiffusion."""
+
+    def __init__(self, img_height=512, img_width=512, download_weights=True):
+        super().__init__(
+            [
+                keras.layers.Input((img_height, img_width, 3)),
+                PaddedConv2D(128, 3, padding=1),
+                ResnetBlock(128),
+                ResnetBlock(128),
+                PaddedConv2D(128, 3, padding=1, strides=2),
+                ResnetBlock(256),
+                ResnetBlock(256),
+                PaddedConv2D(256, 3, padding=1, strides=2),
+                ResnetBlock(512),
+                ResnetBlock(512),
+                PaddedConv2D(512, 3, padding=1, strides=2),
+                ResnetBlock(512),
+                ResnetBlock(512),
+                ResnetBlock(512),
+                AttentionBlock(512),
+                ResnetBlock(512),
+                keras.layers.GroupNormalization(epsilon=1e-5),
+                keras.layers.Activation("swish"),
+                PaddedConv2D(8, 3, padding=1),
+                PaddedConv2D(8, 1),
+                # TODO(lukewood): can this be refactored to be a Rescaling layer?
+                # Perhaps some sort of rescale and gather?
+                # Either way, we may need a lambda to gather the first 4 dimensions.
+                keras.layers.Lambda(lambda x: x[..., :4] * 0.18215),
+            ]
+        )
+
+        if download_weights:
+            image_encoder_weights_fpath = keras.utils.get_file(
+                origin="https://huggingface.co/fchollet/stable-diffusion/resolve/main/vae_encoder.h5",
+                file_hash="c60fb220a40d090e0f86a6ab4c312d113e115c87c40ff75d11ffcf380aab7ebb",
+            )
+            self.load_weights(image_encoder_weights_fpath)
 
 class StableDiffusionBase:
     """Base class for stable diffusion and stable diffusion v2 model
@@ -460,58 +510,25 @@ class StableDiffusionBase:
                 tf.expand_dims(text_embedding, axis=0), batch_size, axis=0
             )
         return text_embedding
-from tensorflow import keras
 
-from keras_cv.models.stable_diffusion.__internal__.layers.attention_block import (
-    AttentionBlock,
-)
-from keras_cv.models.stable_diffusion.__internal__.layers.padded_conv2d import (
-    PaddedConv2D,
-)
-from keras_cv.models.stable_diffusion.__internal__.layers.resnet_block import (
-    ResnetBlock,
-)
+    @property
+    def image_encoder(self):
+        """Returns the VAE Encoder with pretrained weights.
+        The method first checks if the `_image_encoder` attribute is None. If it is, it creates a new
+        instance of the `ImageEncoder` class with the image height and width specified by the
+        `img_height` and `img_width` attributes. If the `jit_compile` attribute is True, the encoder
+        is compiled with JIT compilation enabled. The `_image_encoder` attribute is then set to the
+        newly created encoder instance. Finally, the `_image_encoder` attribute is returned.
+        If the `_image_encoder` attribute is not None, the existing encoder instance is returned.
 
-
-class ImageEncoder(keras.Sequential):
-    """ImageEncoder is the VAE Encoder for StableDiffusion."""
-
-    def __init__(self, img_height=512, img_width=512, download_weights=True):
-        super().__init__(
-            [
-                keras.layers.Input((img_height, img_width, 3)),
-                PaddedConv2D(128, 3, padding=1),
-                ResnetBlock(128),
-                ResnetBlock(128),
-                PaddedConv2D(128, 3, padding=1, strides=2),
-                ResnetBlock(256),
-                ResnetBlock(256),
-                PaddedConv2D(256, 3, padding=1, strides=2),
-                ResnetBlock(512),
-                ResnetBlock(512),
-                PaddedConv2D(512, 3, padding=1, strides=2),
-                ResnetBlock(512),
-                ResnetBlock(512),
-                ResnetBlock(512),
-                AttentionBlock(512),
-                ResnetBlock(512),
-                keras.layers.GroupNormalization(epsilon=1e-5),
-                keras.layers.Activation("swish"),
-                PaddedConv2D(8, 3, padding=1),
-                PaddedConv2D(8, 1),
-                # TODO(lukewood): can this be refactored to be a Rescaling layer?
-                # Perhaps some sort of rescale and gather?
-                # Either way, we may need a lambda to gather the first 4 dimensions.
-                keras.layers.Lambda(lambda x: x[..., :4] * 0.18215),
-            ]
-        )
-
-        if download_weights:
-            image_encoder_weights_fpath = keras.utils.get_file(
-                origin="https://huggingface.co/fchollet/stable-diffusion/resolve/main/vae_encoder.h5",
-                file_hash="c60fb220a40d090e0f86a6ab4c312d113e115c87c40ff75d11ffcf380aab7ebb",
-            )
-            self.load_weights(image_encoder_weights_fpath)
+        Returns:
+        - ImageEncoder: The VAE Encoder with pretrained weights
+        """
+        if self._image_encoder is None:
+            self._image_encoder = ImageEncoder(self.img_height, self.img_width)
+            if self.jit_compile:
+                self._image_encoder.compile(jit_compile=True)
+        return self._image_encoder
 
     @property
     def text_encoder(self):

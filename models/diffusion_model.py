@@ -16,12 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-from tensorflow import keras
+from keras_cv.backend import keras
+from keras_cv.backend import ops
+from keras_cv.models.stable_diffusion.padded_conv2d import PaddedConv2D
 
-from keras_cv.models.stable_diffusion.__internal__.layers.padded_conv2d import (
-    PaddedConv2D,
-)
 
 
 class DiffusionModel(keras.Model):

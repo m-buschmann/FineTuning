@@ -17,7 +17,8 @@
 # limitations under the License.
 
 import tensorflow as tf
-from tensorflow import keras
+from keras_cv.backend import keras
+from keras_cv.backend import ops
 from tensorflow.experimental import numpy as tfnp
 
 
